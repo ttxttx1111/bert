@@ -423,7 +423,7 @@ def main():
 
     ## Other parameters
     parser.add_argument("--max_seq_length",
-                        default=300,
+                        default=256,
                         type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. \n"
                              "Sequences longer than this will be truncated, and sequences shorter \n"
@@ -484,7 +484,7 @@ def main():
                         help="local_rank for distributed training on gpus")
     parser.add_argument('--seed',
                         type=int,
-                        default=42,
+                        default=41,
                         help="random seed for initialization")
     parser.add_argument('--gradient_accumulation_steps',
                         type=int,
@@ -562,6 +562,7 @@ def main():
     # processor = processors[task_name]()
     processor = WSDM_Chinese_Processor()
     label_list = processor.get_labels()
+    weights = torch.tensor([16/15, 16/5, 1]).to(device)
 
     tokenizer = BertTokenizer.from_pretrained(args.bert_model)
 
@@ -645,13 +646,15 @@ def main():
         train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.train_batch_size)
 
         model.train()
+        count = 0
         for _ in trange(int(args.num_train_epochs), desc="Epoch"):
+            count += 1
             tr_loss = 0
             nb_tr_examples, nb_tr_steps = 0, 0
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
                 batch = tuple(t.to(device) for t in batch)
                 input_ids, input_mask, segment_ids, label_ids = batch
-                loss = model(input_ids, segment_ids, input_mask, label_ids)
+                loss,_ = model(input_ids, segment_ids, input_mask, label_ids, weights=weights)
                 if n_gpu > 1:
                     loss = loss.mean() # mean() to average on multi-gpu.
                 if args.fp16 and args.loss_scale != 1.0:
@@ -684,7 +687,7 @@ def main():
                     model.zero_grad()
                     global_step += 1
 
-        torch.save(model.state_dict(), args.bert_model + "/pytorch_model.bin.chinese_1")
+            torch.save(model.state_dict(), args.bert_model + "/pytorch_model.bin.chinese_1_"+str(count))
 
 
     if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
@@ -811,7 +814,7 @@ def main():
             segment_ids = segment_ids.to(device)
 
             with torch.no_grad():
-                logits = model(input_ids, segment_ids, input_mask)
+                logits = model(input_ids, segment_ids, input_mask,weights=weights)
 
             logits = logits.detach().cpu().numpy()
             outputs = np.argmax(logits, axis=1)
