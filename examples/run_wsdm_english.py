@@ -38,19 +38,20 @@ from pytorch_pretrained_bert.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 import pickle
 import shutil
 
-
 ###-------------------------global configurations-------------------------
 # if True run on full training set, else run on splitted train and validation set
-full_train = False
+full_train = True
 
 # if True run on Joey's local Machine, else run on AWS
-local = False
+local = True
 
 # if english_base means bert base english, if english_large means bert large english, if chinese_base means bert base chinese
-model_type = "chinese_base"
+model_type = "chinese"
 
 # if True use cached dataset, else generate dataset and save
 cached = False
+
+
 ###-------------------------global configurations-------------------------
 
 
@@ -59,13 +60,14 @@ def save_checkpoint(state, filename):
     # if is_best:
     #     shutil.copyfile(filename, 'model_best.pth.tar')
 
+
 def load_checkpoint(filename):
     return torch.load(filename)
 
 
-logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
-                    datefmt = '%m/%d/%Y %H:%M:%S',
-                    level = logging.INFO)
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
+                    datefmt='%m/%d/%Y %H:%M:%S',
+                    level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -388,24 +390,23 @@ def convert_examples_to_features(examples, label_list, max_seq_length, tokenizer
         if example.label:
             label_id = label_map[example.label]
 
-
         if ex_index < 5:
             logger.info("*** Example ***")
             logger.info("guid: %s" % (example.guid))
             logger.info("tokens: %s" % " ".join(
-                    [str(x) for x in tokens]))
+                [str(x) for x in tokens]))
             logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
             logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
             logger.info(
-                    "segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
+                "segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
             if example.label:
                 logger.info("label: %s (id = %d)" % (example.label, label_id))
 
         features.append(
-                InputFeatures(input_ids=input_ids,
-                              input_mask=input_mask,
-                              segment_ids=segment_ids,
-                              label_id=label_id))
+            InputFeatures(input_ids=input_ids,
+                          input_mask=input_mask,
+                          segment_ids=segment_ids,
+                          label_id=label_id))
     return features
 
 
@@ -425,9 +426,15 @@ def _truncate_seq_pair(tokens_a, tokens_b, max_length):
         else:
             tokens_b.pop()
 
+
 def accuracy(out, labels):
     outputs = np.argmax(out, axis=1)
     return np.sum(outputs == labels)
+
+def score(out, labels, weights):
+    outputs = np.argmax(out, axis=1)
+    label_weights = [weights[l] for l in labels]
+    return np.sum((labels == outputs) * label_weights)
 
 def copy_optimizer_params_to_model(named_params_model, named_params_optimizer):
     """ Utility function for optimize_on_cpu and 16-bits training.
@@ -438,6 +445,7 @@ def copy_optimizer_params_to_model(named_params_model, named_params_optimizer):
             logger.error("name_opti != name_model: {} {}".format(name_opti, name_model))
             raise ValueError
         param_model.data.copy_(param_opti.data)
+
 
 def set_optimizer_params_grad(named_params_optimizer, named_params_model, test_nan=False):
     """ Utility function for optimize_on_cpu and 16-bits training.
@@ -458,35 +466,35 @@ def set_optimizer_params_grad(named_params_optimizer, named_params_model, test_n
             param_opti.grad = None
     return is_nan
 
+
 def main():
-
-
     parser = argparse.ArgumentParser()
 
-    if local:
-        base_dir = "/home/joey/Documents/pytorch-pretrained-BERT/"
-    else:
-        base_dir = "/home/ubuntu/pytorch-pretrained-BERT/"
+    base_dir = "/home/ttx/ttx/fakenews"
 
     ## Required parameters
     parser.add_argument("--data_dir",
-                        default=base_dir + "/wsdm/",
+                        default=base_dir + "/input/",
                         type=str,
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
+
     if model_type == "english_base":
-        parser.add_argument("--bert_model", default="bert-base-uncased", type=str,
-                        help="Bert pre-trained model selected in the list: bert-base-uncased, "
-                             "bert-large-uncased, bert-base-cased, bert-base-multilingual, bert-base-chinese.")
+        # parser.add_argument("--bert_model", default="bert-base-uncased", type=str,
+        #                 help="Bert pre-trained model selected in the list: bert-base-uncased, "
+        #                      "bert-large-uncased, bert-base-cased, bert-base-multilingual, bert-base-chinese.")
+        parser.add_argument("--bert_model", default=base_dir + "/english_base", type=str,
+                            help="Bert pre-trained model selected in the list: bert-base-uncased, "
+                                 "bert-large-uncased, bert-base-cased, bert-base-multilingual, bert-base-chinese.")
         parser.add_argument("--task_name",
                             default="wsdm_english",
                             type=str,
                             help="The name of the task to train.")
         parser.add_argument("--output_dir",
-                            default=base_dir + "/wsdm/output/english_base/",
+                            default=base_dir + "/output/english_base/",
                             type=str,
                             help="The output directory where the model results will be written.")
         parser.add_argument("--model_dir",
-                            default=base_dir + "/wsdm/model/english_base/",
+                            default=base_dir + "/english_base/",
                             type=str,
                             help="The output directory where the model checkpoints will be written.")
     elif model_type == "english_large":
@@ -505,8 +513,8 @@ def main():
                             default=base_dir + "/wsdm/model/english_large/",
                             type=str,
                             help="The output directory where the model checkpoints will be written.")
-    elif model_type == "chinese_base":
-        parser.add_argument("--bert_model", default="bert-base-chinese", type=str,
+    elif model_type == "chinese":
+        parser.add_argument("--bert_model", default=base_dir + "/chinese", type=str,
                             help="Bert pre-trained model selected in the list: bert-base-uncased, "
                                  "bert-large-uncased, bert-base-cased, bert-base-multilingual, bert-base-chinese.")
         parser.add_argument("--task_name",
@@ -514,19 +522,17 @@ def main():
                             type=str,
                             help="The name of the task to train.")
         parser.add_argument("--output_dir",
-                            default=base_dir + "/wsdm/output/chinese_base/",
+                            default=base_dir + "/output/chinese/",
                             type=str,
                             help="The output directory where the model results will be written.")
         parser.add_argument("--model_dir",
-                            default=base_dir + "/wsdm/model/chinese_base/",
+                            default=base_dir + "/chinese/",
                             type=str,
                             help="The output directory where the model checkpoints will be written.")
 
-
-
     ## Other parameters
     parser.add_argument("--max_seq_length",
-                        default=300,
+                        default=256,
                         type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. \n"
                              "Sequences longer than this will be truncated, and sequences shorter \n"
@@ -544,7 +550,7 @@ def main():
     if local:
         # if run locally use smaller batch sizes
         parser.add_argument("--train_batch_size",
-                            default=8,
+                            default=32,
                             type=int,
                             help="Total batch size for training.")
         parser.add_argument("--eval_batch_size",
@@ -596,7 +602,7 @@ def main():
                         help="random seed for initialization")
     parser.add_argument('--gradient_accumulation_steps',
                         type=int,
-                        default=1,
+                        default=4,
                         help="Number of updates steps to accumualte before performing a backward/update pass.")
     parser.add_argument('--optimize_on_cpu',
                         default=False,
@@ -610,25 +616,31 @@ def main():
                         type=float, default=128,
                         help='Loss scaling, positive power of 2 values can improve fp16 convergence.')
     parser.add_argument('--load_checkpoint',
-                        default=True,
+                        default=False,
                         help='Whether to load from exisiting checkpoint')
     parser.add_argument('--checkpoint_path',
-                        type=str, default=base_dir + "/wsdm/model/chinese_base/chinese_base_epoch_2_part_train.dat",
+                        type=str, default=base_dir + "/input/model/chinese_base/chinese_base_epoch_2_part_train.dat",
                         help='The path of checkpoint to load from')
 
     if full_train:
-        parser.add_argument('--cached_train_examples', type=str, default=base_dir+'/wsdm/'+model_type+'/cached_train_full_examples.dat')
-        parser.add_argument('--cached_train_features', type=str, default=base_dir + '/wsdm/'+model_type+'/cached_train_full_features.dat')
+        parser.add_argument('--cached_train_examples', type=str,
+                            default=base_dir + '/input/' + model_type + '/cached_train_full_examples.dat')
+        parser.add_argument('--cached_train_features', type=str,
+                            default=base_dir + '/input/' + model_type + '/cached_train_full_features.dat')
     else:
         parser.add_argument('--cached_train_examples', type=str,
-                            default=base_dir + '/wsdm/'+model_type+'/cached_train_examples.dat')
+                            default=base_dir + '/input/' + model_type + '/cached_train_examples.dat')
         parser.add_argument('--cached_train_features', type=str,
-                            default=base_dir + '/wsdm/'+model_type+'/cached_train_features.dat')
+                            default=base_dir + '/input/' + model_type + '/cached_train_features.dat')
 
-    parser.add_argument('--cached_dev_examples', type=str, default=base_dir + '/wsdm/'+model_type+'/cached_dev_examples.dat')
-    parser.add_argument('--cached_dev_features', type=str, default=base_dir + '/wsdm/'+model_type+'/cached_dev_features.dat')
-    parser.add_argument('--cached_test_examples', type=str, default=base_dir + '/wsdm/'+model_type+'/cached_test_examples.dat')
-    parser.add_argument('--cached_test_features', type=str, default=base_dir + '/wsdm/'+model_type+'/cached_test_features.dat')
+    parser.add_argument('--cached_dev_examples', type=str,
+                        default=base_dir + '/input/' + model_type + '/cached_dev_examples.dat')
+    parser.add_argument('--cached_dev_features', type=str,
+                        default=base_dir + '/input/' + model_type + '/cached_dev_features.dat')
+    parser.add_argument('--cached_test_examples', type=str,
+                        default=base_dir + '/input/' + model_type + '/cached_test_examples.dat')
+    parser.add_argument('--cached_test_features', type=str,
+                        default=base_dir + '/input/' + model_type + '/cached_test_features.dat')
 
     args = parser.parse_args()
 
@@ -650,12 +662,12 @@ def main():
         torch.distributed.init_process_group(backend='nccl')
         if args.fp16:
             logger.info("16-bits training currently not supported in distributed training")
-            args.fp16 = False # (see https://github.com/pytorch/pytorch/pull/13496)
+            args.fp16 = False  # (see https://github.com/pytorch/pytorch/pull/13496)
     logger.info("device %s n_gpu %d distributed training %r", device, n_gpu, bool(args.local_rank != -1))
 
     if args.gradient_accumulation_steps < 1:
         raise ValueError("Invalid gradient_accumulation_steps parameter: {}, should be >= 1".format(
-                            args.gradient_accumulation_steps))
+            args.gradient_accumulation_steps))
 
     args.train_batch_size = int(args.train_batch_size / args.gradient_accumulation_steps)
 
@@ -685,7 +697,6 @@ def main():
     train_examples = None
     num_train_steps = None
 
-
     if args.do_train:
 
         if cached:
@@ -702,8 +713,10 @@ def main():
             len(train_examples) / args.train_batch_size / args.gradient_accumulation_steps * args.num_train_epochs)
 
     # Prepare model
-    model = BertForSequenceClassification.from_pretrained(args.bert_model,
-                cache_dir=PYTORCH_PRETRAINED_BERT_CACHE / 'distributed_{}'.format(args.local_rank), num_labels=len(label_list))
+    # model = BertForSequenceClassification.from_pretrained(args.bert_model,
+    #             cache_dir=PYTORCH_PRETRAINED_BERT_CACHE / 'distributed_{}'.format(args.local_rank), num_labels=len(label_list))
+    #
+    model = BertForSequenceClassification.from_pretrained(args.bert_model, num_labels=len(label_list))
 
     if args.fp16:
         model.half()
@@ -717,17 +730,17 @@ def main():
     # Prepare optimizer
     if args.fp16:
         param_optimizer = [(n, param.clone().detach().to('cpu').float().requires_grad_()) \
-                            for n, param in model.named_parameters()]
+                           for n, param in model.named_parameters()]
     elif args.optimize_on_cpu:
         param_optimizer = [(n, param.clone().detach().to('cpu').requires_grad_()) \
-                            for n, param in model.named_parameters()]
+                           for n, param in model.named_parameters()]
     else:
         param_optimizer = list(model.named_parameters())
     no_decay = ['bias', 'gamma', 'beta']
     optimizer_grouped_parameters = [
         {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay_rate': 0.01},
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay_rate': 0.0}
-        ]
+    ]
     t_total = num_train_steps
     if args.local_rank != -1:
         t_total = t_total // torch.distributed.get_world_size()
@@ -743,7 +756,9 @@ def main():
         start_epoch = ckpt['epoch']
         model.load_state_dict(ckpt['state_dict'])
         optimizer.load_state_dict(ckpt['optimizer'])
-        logger.info("***** Resuming model and optimizer states from Checkpoint " + args.checkpoint_path + " Restart from Epoch " + str(start_epoch) + " *****")
+        logger.info(
+            "***** Resuming model and optimizer states from Checkpoint " + args.checkpoint_path + " Restart from Epoch " + str(
+                start_epoch) + " *****")
 
     if args.do_train:
         if cached:
@@ -756,7 +771,6 @@ def main():
                 train_examples, label_list, args.max_seq_length, tokenizer)
             with open(args.cached_train_features, 'wb') as writer:
                 pickle.dump(train_features, writer)
-
 
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(train_examples))
@@ -780,9 +794,11 @@ def main():
             for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
                 batch = tuple(t.to(device) for t in batch)
                 input_ids, input_mask, segment_ids, label_ids = batch
-                loss, _ = model(input_ids, segment_ids, input_mask, label_ids)
+                # loss, _ = model(input_ids, segment_ids, input_mask, label_ids)
+                loss = model(input_ids, segment_ids, input_mask, label_ids)
+
                 if n_gpu > 1:
-                    loss = loss.mean() # mean() to average on multi-gpu.
+                    loss = loss.mean()  # mean() to average on multi-gpu.
                 if args.fp16 and args.loss_scale != 1.0:
                     # rescale loss for fp16 training
                     # see https://docs.nvidia.com/deeplearning/sdk/mixed-precision-training/index.html
@@ -824,8 +840,11 @@ def main():
                              },
                             filename=filename)
 
-
     if args.do_eval and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
+
+        # load model temporary
+        model.load_state_dict(torch.load("/home/ttx/ttx/fakenews/chinese/pytorch_model.bin.chinese_weight"))
+        weights = {0:1/15, 1:1/5, 2:1/16}
 
         if cached:
             # load examples
@@ -848,7 +867,6 @@ def main():
             with open(args.cached_dev_features, 'wb') as writer:
                 pickle.dump(eval_features, writer)
 
-
         logger.info("***** Running evaluation *****")
         logger.info("  Num examples = %d", len(eval_examples))
         logger.info("  Batch size = %d", args.eval_batch_size)
@@ -862,7 +880,7 @@ def main():
         eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.eval_batch_size)
 
         model.eval()
-        eval_loss, eval_accuracy = 0, 0
+        eval_loss, eval_accuracy, eval_score = 0, 0, 0
         nb_eval_steps, nb_eval_examples = 0, 0
 
         for input_ids, input_mask, segment_ids, label_ids in tqdm(eval_dataloader):
@@ -877,25 +895,30 @@ def main():
             logits = logits.detach().cpu().numpy()
             label_ids = label_ids.to('cpu').numpy()
             tmp_eval_accuracy = accuracy(logits, label_ids)
+            tmp_eval_score = score(logits, label_ids, weights)
 
             eval_loss += tmp_eval_loss.mean().item()
             eval_accuracy += tmp_eval_accuracy
+            eval_score += tmp_eval_score
 
             nb_eval_examples += input_ids.size(0)
             nb_eval_steps += 1
 
         eval_loss = eval_loss / nb_eval_steps
         eval_accuracy = eval_accuracy / nb_eval_examples
+        eval_score = eval_score / nb_eval_examples
 
         if args.do_train:
             result = {'eval_loss': eval_loss,
-                  'eval_accuracy': eval_accuracy,
-                  'global_step': global_step,
-                  'loss': tr_loss/nb_tr_steps}
+                      'eval_accuracy': eval_accuracy,
+                      'eval_score':eval_score,
+                      'global_step': global_step,
+                      'loss': tr_loss / nb_tr_steps}
         else:
             result = {'eval_loss': eval_loss,
-                  'eval_accuracy': eval_accuracy,
-                  'global_step': global_step}
+                      'eval_accuracy': eval_accuracy,
+                      'eval_score': eval_score,
+                      'global_step': global_step}
 
         output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
         with open(output_eval_file, "w") as writer:
@@ -903,7 +926,6 @@ def main():
             for key in sorted(result.keys()):
                 logger.info("  %s = %s", key, str(result[key]))
                 writer.write("%s = %s\n" % (key, str(result[key])))
-
 
     if args.do_predict and (args.local_rank == -1 or torch.distributed.get_rank() == 0):
 
@@ -934,7 +956,6 @@ def main():
                 test_examples, label_list, args.max_seq_length, tokenizer)
             with open(args.cached_test_features, 'wb') as writer:
                 pickle.dump(test_features, writer)
-
 
         logger.info("***** Running prediction *****")
         logger.info("  Num examples = %d", len(test_examples))
@@ -972,7 +993,8 @@ def main():
             nb_test_examples += input_ids.size(0)
             nb_test_steps += 1
 
-        print("Total number of test examples: " + str(nb_test_examples) + " Total number of test steps: " + str(nb_test_steps))
+        print("Total number of test examples: " + str(nb_test_examples) + " Total number of test steps: " + str(
+            nb_test_steps))
 
         output_prediction_file = os.path.join(args.output_dir, "prediction.csv")
         with open(output_prediction_file, "w") as writer:
@@ -980,6 +1002,7 @@ def main():
             writer.write("Id,Category\n")
             for key in sorted(predictions.keys()):
                 writer.write("%s,%s\n" % (str(key), str(label_inv_map[predictions[key]])))
+
 
 if __name__ == "__main__":
     main()
